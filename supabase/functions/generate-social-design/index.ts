@@ -47,9 +47,7 @@ serve(async (req) => {
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY not configured");
     if (!AZURE_IMAGE_ENDPOINT) throw new Error("AZURE_IMAGE_ENDPOINT not configured");
 
-    const fullPrompt = `${prompt.trim()}
-
-Design a social media graphic for ${spec.label}. Modern, eye-catching, print-quality. Leave room for headline text. Solid clean composition.`;
+    const fullPrompt = prompt.trim();
 
     const r = await fetch(AZURE_IMAGE_ENDPOINT, {
       method: "POST",
@@ -60,7 +58,7 @@ Design a social media graphic for ${spec.label}. Modern, eye-catching, print-qua
       body: JSON.stringify({
         prompt: fullPrompt,
         size: spec.size,
-        quality: "low",
+        quality: "high",
         output_format: "png",
         n: 1,
       }),
