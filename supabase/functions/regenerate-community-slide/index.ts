@@ -13,7 +13,7 @@ serve(async (req) => {
     const { inputs, computed, recommendation, slideTitle, currentSlide, instruction } = await req.json();
 
     const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
-    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT");
 
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 

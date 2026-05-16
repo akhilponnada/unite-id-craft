@@ -29,8 +29,7 @@ serve(async (req) => {
     const hint = KIND_HINTS[k] || KIND_HINTS.flyer;
 
     const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
-    const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT") ||
-      "https://ai-akhilponnada2047ai102855017871.cognitiveservices.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=2024-02-01";
+    const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT");
 
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
