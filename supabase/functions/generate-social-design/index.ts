@@ -54,12 +54,14 @@ Design a social media graphic for ${spec.label}. Modern, eye-catching, print-qua
     const r = await fetch(AZURE_IMAGE_ENDPOINT, {
       method: "POST",
       headers: {
-        "api-key": AZURE_API_KEY,
+        "Authorization": `Bearer ${AZURE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         prompt: fullPrompt,
         size: spec.size,
+        quality: "low",
+        output_format: "png",
         n: 1,
       }),
     });
