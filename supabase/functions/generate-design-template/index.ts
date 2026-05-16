@@ -28,32 +28,43 @@ serve(async (req) => {
     const k = (kind || "flyer") as keyof typeof KIND_HINTS;
     const hint = KIND_HINTS[k] || KIND_HINTS.flyer;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT") ||
+      "https://ai-akhilponnada2047ai102855017871.cognitiveservices.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=2024-02-01";
+
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const fullPrompt = `Design a professional ${k} background template. ${hint}
 User brief: ${prompt.trim()}.
 Leave clear empty zones for headline text, body text, and a logo area so text can be overlaid later.
 Print-ready, clean typography hints, modern, on-brand for a solar / clean-energy company.`;
 
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch(AZURE_IMAGE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${AZURE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: fullPrompt }],
-        modalities: ["image", "text"],
+        prompt: fullPrompt,
+        size: k === "presentation" ? "1792x1024" : "1024x1792",
+        quality: "high",
+        n: 1,
       }),
     });
 
     if (!r.ok) {
       if (r.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (r.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      throw new Error(`AI gateway error: ${r.status}`);
+      const t = await r.text();
+      console.error("Azure image error:", r.status, t);
+      throw new Error(`Image generation error: ${r.status}`);
     }
+
     const data = await r.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    if (!imageUrl) throw new Error("No image generated");
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image generated");
+
+    const imageUrl = `data:image/png;base64,${b64}`;
     return new Response(JSON.stringify({ image: imageUrl }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

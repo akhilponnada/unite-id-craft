@@ -13,7 +13,6 @@ const THEME_STYLE: Record<string, string> = {
   "Luxury Gold": "rich champagne gold, warm cream over deep brown, opulent magazine luxury feel",
 };
 
-/** Keyword art direction per slide title — keeps each slide visually distinct. */
 function promptForSlide(title: string): string {
   const t = title.toLowerCase();
   if (t.includes("cover")) return "panoramic aerial view of an Indian gated community at golden hour with rooftop solar arrays";
@@ -40,8 +39,12 @@ serve(async (req) => {
 
   try {
     const { theme, slideTitle } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT") ||
+      "https://ai-akhilponnada2047ai102855017871.cognitiveservices.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=2024-02-01";
+
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const style = THEME_STYLE[theme] || THEME_STYLE["Dark Premium"];
     const subject = promptForSlide(slideTitle || "");
@@ -52,13 +55,17 @@ Color & mood: ${style}.
 Composition: cinematic, photoreal, generous dark/low-detail negative space across left half and bottom for text overlays. Soft vignette toward the edges so white text remains readable.
 Strict rules: NO text, NO watermarks, NO logos, NO faces, NO charts/graphs as actual readable content. Treat text-area as smooth gradient. Magazine-cover quality.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(AZURE_IMAGE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${AZURE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: prompt }],
-        modalities: ["image", "text"],
+        prompt: prompt,
+        size: "1792x1024",
+        quality: "high",
+        n: 1,
       }),
     });
 
@@ -68,20 +75,16 @@ Strict rules: NO text, NO watermarks, NO logos, NO faces, NO charts/graphs as ac
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure image error:", response.status, t);
+      throw new Error(`Image generation error: ${response.status}`);
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    if (!imageUrl) throw new Error("No image was generated.");
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image was generated.");
 
+    const imageUrl = `data:image/png;base64,${b64}`;
     return new Response(JSON.stringify({ image: imageUrl }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 /**
- * Accepts { fileBase64: string, mimeType: string } and uses Lovable AI Gemini vision
+ * Accepts { fileBase64: string, mimeType: string } and uses Azure Claude Opus
  * to extract a structured power bill summary.
  */
 serve(async (req) => {
@@ -20,63 +20,66 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
-    const dataUrl = fileBase64.startsWith("data:") ? fileBase64 : `data:${mimeType};base64,${fileBase64}`;
+    const base64Data = fileBase64.startsWith("data:") ? fileBase64.split(",")[1] : fileBase64;
 
-    const schema = {
-      type: "object",
-      properties: {
-        consumer_name: { type: "string" },
-        service_number: { type: "string", description: "Service / consumer / meter number" },
-        utility_provider: { type: "string", description: "Utility/DISCOM name (TSSPDCL, BESCOM, MSEDCL, etc.)" },
-        tariff_category: { type: "string", description: "Tariff category/code, e.g. LT-II(A), HT-II, Domestic" },
-        consumer_segment: { type: "string", enum: ["residential", "commercial", "industrial", "agricultural", "unknown"] },
-        location: { type: "string" },
-        state: { type: "string", description: "Indian state name (e.g. Telangana, Karnataka)" },
-        billing_month: { type: "string" },
-        monthly_units: { type: "number", description: "Total units consumed in the bill cycle" },
-        monthly_bill: { type: "number", description: "Total amount payable in INR" },
-        energy_charge_per_unit: { type: "number", description: "Average energy charge in INR/unit (excluding fixed/demand)" },
-        fixed_monthly_charges: { type: "number", description: "Fixed + demand + meter rent charges in INR" },
-        demand_charges: { type: "number", description: "Demand charges component in INR" },
-        tax_pct: { type: "number", description: "Electricity duty + taxes as % of energy charges" },
-        sanction_load_kw: { type: "number", description: "Sanctioned / contract demand in kW" },
-        connected_load_kw: { type: "number", description: "Connected load in kW" },
-        last_6_months_units: {
-          type: "array",
-          items: { type: "number" },
-          description: "Recent monthly consumption history if visible on bill (most recent first), else empty",
-        },
-        confidence: { type: "string", enum: ["high", "medium", "low"] },
-      },
-      required: ["monthly_units", "monthly_bill"],
-    };
+    const systemPrompt = `You are an expert at parsing Indian electricity bills (TSSPDCL, APSPDCL, BESCOM, MSEDCL, etc.). Extract every requested field precisely. If a field isn't visible, return 0 (numbers) or empty string. Convert all amounts to plain INR numbers (e.g. '₹3,036,352' → 3036352). For energy charge per unit, average the slab rates if multiple. For tax %, sum electricity duty + cess as % of energy charges.
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+Return a JSON object with these fields:
+- consumer_name: string
+- service_number: string (Service / consumer / meter number)
+- utility_provider: string (Utility/DISCOM name)
+- tariff_category: string (e.g. LT-II(A), HT-II, Domestic)
+- consumer_segment: "residential" | "commercial" | "industrial" | "agricultural" | "unknown"
+- location: string
+- state: string (Indian state name)
+- billing_month: string
+- monthly_units: number (Total units consumed)
+- monthly_bill: number (Total amount payable in INR)
+- energy_charge_per_unit: number (Average energy charge in INR/unit)
+- fixed_monthly_charges: number (Fixed + demand + meter rent in INR)
+- demand_charges: number (Demand charges in INR)
+- tax_pct: number (Electricity duty + taxes as % of energy charges)
+- sanction_load_kw: number (Sanctioned / contract demand in kW)
+- connected_load_kw: number (Connected load in kW)
+- last_6_months_units: number[] (Recent monthly consumption, most recent first)
+- confidence: "high" | "medium" | "low"
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+    const response = await fetch(AZURE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": AZURE_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-opus-4-5",
+        max_tokens: 2000,
+        system: systemPrompt,
         messages: [
-          {
-            role: "system",
-            content: "You are an expert at parsing Indian electricity bills (TSSPDCL, APSPDCL, BESCOM, MSEDCL, etc.). Extract every requested field precisely. If a field isn't visible, return 0 (numbers) or empty string. Convert all amounts to plain INR numbers (e.g. '₹3,036,352' → 3036352). For energy charge per unit, average the slab rates if multiple. For tax %, sum electricity duty + cess as % of energy charges.",
-          },
           {
             role: "user",
             content: [
-              { type: "text", text: "Extract the structured fields from this power bill." },
-              { type: "image_url", image_url: { url: dataUrl } },
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mimeType,
+                  data: base64Data,
+                },
+              },
+              {
+                type: "text",
+                text: "Extract the structured fields from this power bill and return as JSON.",
+              },
             ],
           },
         ],
-        tools: [{
-          type: "function",
-          function: { name: "extract_bill", description: "Return parsed power bill fields.", parameters: schema },
-        }],
-        tool_choice: { type: "function", function: { name: "extract_bill" } },
       }),
     });
 
@@ -86,20 +89,16 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure Claude error:", response.status, t);
+      throw new Error(`Azure Claude error: ${response.status}`);
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI did not return a structured bill");
-    const args = JSON.parse(toolCall.function.arguments);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("AI did not return valid JSON");
+    const args = JSON.parse(jsonMatch[0]);
 
     return new Response(JSON.stringify(args), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

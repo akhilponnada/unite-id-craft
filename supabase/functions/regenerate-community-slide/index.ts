@@ -11,8 +11,11 @@ serve(async (req) => {
 
   try {
     const { inputs, computed, recommendation, slideTitle, currentSlide, instruction } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const themeTone: Record<string, string> = {
       "Dark Premium": "high-end, gold + white, confident.",
@@ -23,7 +26,10 @@ serve(async (req) => {
 
     const systemPrompt = `You are an expert solar consultant for Unite Solar regenerating ONE slide of a community proposal deck.
 Theme tone: ${themeTone[inputs.theme] || themeTone["Dark Premium"]}
-Be punchy, slide-style, financially precise. Use the supplied numbers. Recommended model: ${recommendation}.`;
+Be punchy, slide-style, financially precise. Use the supplied numbers. Recommended model: ${recommendation}.
+
+Return a JSON object with: title, subtitle, bullets (array of 3-6 strings), highlight (optional: {label, value}).
+Return ONLY valid JSON, no markdown.`;
 
     const userPrompt = `INPUTS:
 ${JSON.stringify(inputs, null, 2)}
@@ -38,50 +44,34 @@ ${JSON.stringify(currentSlide, null, 2)}
 
 ${instruction ? `EXTRA INSTRUCTION FROM USER: ${instruction}` : "Make it sharper, more specific, more persuasive."}`;
 
-    const slideSchema = {
-      type: "object",
-      properties: {
-        title: { type: "string" },
-        subtitle: { type: "string" },
-        bullets: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 },
-        highlight: {
-          type: "object",
-          properties: { label: { type: "string" }, value: { type: "string" } },
-        },
-      },
-      required: ["title", "bullets"],
-    };
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(AZURE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": AZURE_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [{
-          type: "function",
-          function: { name: "build_slide", description: "Return one regenerated slide.", parameters: slideSchema },
-        }],
-        tool_choice: { type: "function", function: { name: "build_slide" } },
+        model: "claude-opus-4-5",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure Claude error:", response.status, t);
+      throw new Error(`AI error: ${response.status}`);
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI did not return a slide.");
-    const slide = JSON.parse(toolCall.function.arguments);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("AI did not return a slide.");
 
+    const slide = JSON.parse(jsonMatch[0]);
     return new Response(JSON.stringify({ slide }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

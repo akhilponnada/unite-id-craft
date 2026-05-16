@@ -17,8 +17,9 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const ctx = context || {};
     const systemPrompt = `You are a senior solar consultant for Unite Solar (India). Answer concisely in plain markdown.
@@ -36,12 +37,23 @@ RULES:
 - For roof area, panels, inverter, generation — quote context numbers exactly.
 - Keep replies under 120 words unless the user asks for detail. Use bullet points where helpful.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const claudeMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+    }));
+
+    const response = await fetch(AZURE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": AZURE_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        model: "claude-opus-4-5",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: claudeMessages,
       }),
     });
 
@@ -51,18 +63,13 @@ RULES:
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure Claude error:", response.status, t);
+      throw new Error(`Azure Claude error: ${response.status}`);
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content ?? "";
+    const reply = data.content?.[0]?.text ?? "";
     return new Response(JSON.stringify({ reply }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

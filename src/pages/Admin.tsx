@@ -303,7 +303,7 @@ const AdminPage: React.FC = () => {
                     <button onClick={() => deleteKey("gemini")} className="text-destructive hover:underline">remove</button>
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">Falls back to built-in Lovable AI</span>
+                  <span className="text-xs text-muted-foreground">Falls back to Azure AI</span>
                 )}
               </div>
               <div className="flex gap-2">
@@ -312,7 +312,7 @@ const AdminPage: React.FC = () => {
                   {savingKey === "gemini" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Get from aistudio.google.com → Get API key. Optional — without it, Unite Flash uses Lovable AI.</p>
+              <p className="text-xs text-muted-foreground">Get from aistudio.google.com → Get API key. Optional — without it, Unite Flash uses Azure AI.</p>
             </div>
           </CardContent>
         </Card>

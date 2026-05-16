@@ -30,8 +30,11 @@ serve(async (req) => {
 
   try {
     const { inputs, computed, recommendation } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const themeTone: Record<string, string> = {
       "Dark Premium": "Use a gold + white tone, high-end corporate, confident and aspirational.",
@@ -52,7 +55,10 @@ For each slide return:
 - bullets (array of 3-6 short bullet strings, each ≤ 110 chars)
 - highlight (optional single big-number callout: { label, value })
 
-Keep bullets punchy (slide-style). Recommend the model "${recommendation}" with a brief 2-line rationale on the Business Model and Conclusion slides.`;
+Keep bullets punchy (slide-style). Recommend the model "${recommendation}" with a brief 2-line rationale on the Business Model and Conclusion slides.
+
+Return a JSON object with: slides (array), executive_summary (string), recommendation_rationale (string).
+Return ONLY valid JSON, no markdown.`;
 
     const userPrompt = `INPUTS:
 ${JSON.stringify(inputs, null, 2)}
@@ -68,57 +74,18 @@ IMPORTANT — when discussing the three business models, use these per-model num
 • Community Self-Invest (SPV): ${computed.selfInvestorCount} investors × ₹${(computed.selfTicketSize || 0).toLocaleString("en-IN")} ticket = ₹${(computed.selfTotalCapital || 0).toLocaleString("en-IN")} capital, target IRR ${computed.selfTargetIrr}%, full monthly saving ₹${(computed.selfMonthlySavings || 0).toLocaleString("en-IN")}.
 State / CMD rule applied: ${(inputs.state || "Other")} cap ${computed.cmdCapPct}% of sanctioned load (${computed.cmdCapKw} kW).`;
 
-    const slideSchema = {
-      type: "object",
-      properties: {
-        slides: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              subtitle: { type: "string" },
-              bullets: { type: "array", items: { type: "string" } },
-              highlight: {
-                type: "object",
-                properties: {
-                  label: { type: "string" },
-                  value: { type: "string" },
-                },
-              },
-            },
-            required: ["title", "bullets"],
-          },
-        },
-        executive_summary: { type: "string" },
-        recommendation_rationale: { type: "string" },
-      },
-      required: ["slides", "executive_summary", "recommendation_rationale"],
-    };
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(AZURE_ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
+        "x-api-key": AZURE_API_KEY,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "build_proposal_deck",
-              description: "Return the structured 16-slide proposal deck.",
-              parameters: slideSchema,
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "build_proposal_deck" } },
+        model: "claude-opus-4-5",
+        max_tokens: 8000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
@@ -128,21 +95,17 @@ State / CMD rule applied: ${(inputs.state || "Other")} cap ${computed.cmdCapPct}
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure Claude error:", response.status, t);
+      throw new Error(`AI error: ${response.status}`);
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI did not return structured slides.");
-    const args = JSON.parse(toolCall.function.arguments);
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("AI did not return structured slides.");
 
+    const args = JSON.parse(jsonMatch[0]);
     return new Response(JSON.stringify(args), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

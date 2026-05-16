@@ -322,7 +322,7 @@ const ResidentialProposalEditor: React.FC = () => {
     a.click();
   };
 
-  // Power bill upload → Lovable AI extraction → fill monthly_savings_per_kw
+  // Power bill upload → AI extraction → fill monthly_savings_per_kw
   const onUploadBill = async (file: File) => {
     if (!row) return;
     setBillBusy(true);

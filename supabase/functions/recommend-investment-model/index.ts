@@ -1,4 +1,8 @@
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
 
 interface Body {
   project_name?: string;
@@ -15,16 +19,19 @@ Deno.serve(async (req) => {
   }
   try {
     const body = (await req.json()) as Body;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_ENDPOINT = Deno.env.get("AZURE_ENDPOINT") || "https://ai-akhilponnada2047ai102855017871.services.ai.azure.com/anthropic/v1/messages";
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY not configured");
 
-    const systemPrompt = `You are a senior solar investment advisor in India. 
+    const systemPrompt = `You are a senior solar investment advisor in India.
 Given a project, recommend ONE best-fit investment model from:
-- "PPA"            (developer owns, client pays per unit; great when client wants no capex)
-- "BOOT"           (build-own-operate-transfer; mid-term ownership transfer)
-- "Self Investment"(client funds capex; best ROI long-term, needs capital)
-- "Community Investment"(crowdfund among residents; great for gated communities)
-Return STRICT JSON via the tool call. Keep reasoning <60 words.`;
+- "PPA" (developer owns, client pays per unit; great when client wants no capex)
+- "BOOT" (build-own-operate-transfer; mid-term ownership transfer)
+- "Self Investment" (client funds capex; best ROI long-term, needs capital)
+- "Community Investment" (crowdfund among residents; great for gated communities)
+
+Return JSON with: model, reasoning (<60 words), confidence (low/medium/high).
+Return ONLY valid JSON, no markdown.`;
 
     const userPrompt = `Project: ${body.project_name ?? ""}
 Location: ${body.location ?? ""}
@@ -33,41 +40,18 @@ Capacity: ${body.capacity_mw ?? ""} MW
 Approx budget: ${body.approx_budget ?? "not provided"}
 Notes: ${body.custom_notes ?? ""}`;
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch(AZURE_ENDPOINT, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
+        "x-api-key": AZURE_API_KEY,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "recommend_model",
-              description: "Return a recommended investment model with reasoning.",
-              parameters: {
-                type: "object",
-                properties: {
-                  model: {
-                    type: "string",
-                    enum: ["PPA", "BOOT", "Self Investment", "Community Investment"],
-                  },
-                  reasoning: { type: "string" },
-                  confidence: { type: "string", enum: ["low", "medium", "high"] },
-                },
-                required: ["model", "reasoning", "confidence"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "recommend_model" } },
+        model: "claude-opus-4-5",
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
@@ -77,30 +61,26 @@ Notes: ${body.custom_notes ?? ""}`;
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-    if (resp.status === 402) {
-      return new Response(
-        JSON.stringify({ error: "AI credits exhausted. Add funds in Workspace > Usage." }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
     if (!resp.ok) {
       const t = await resp.text();
-      console.error("AI gateway error:", resp.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
+      console.error("Azure Claude error:", resp.status, t);
+      return new Response(JSON.stringify({ error: "AI error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const data = await resp.json();
-    const call = data?.choices?.[0]?.message?.tool_calls?.[0];
-    const args = call?.function?.arguments ? JSON.parse(call.function.arguments) : null;
-    if (!args) {
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
       return new Response(JSON.stringify({ error: "No recommendation produced" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const args = JSON.parse(jsonMatch[0]);
     return new Response(JSON.stringify(args), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

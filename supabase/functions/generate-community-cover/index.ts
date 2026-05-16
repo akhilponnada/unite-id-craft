@@ -22,8 +22,12 @@ serve(async (req) => {
 
   try {
     const { theme, communityName, location, capacityKw } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const AZURE_API_KEY = Deno.env.get("AZURE_API_KEY");
+    const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT") ||
+      "https://ai-akhilponnada2047ai102855017871.cognitiveservices.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=2024-02-01";
+
+    if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
 
     const styleLine = THEME_PROMPTS[theme] || THEME_PROMPTS["Dark Premium"];
 
@@ -33,13 +37,17 @@ Composition: cinematic wide landscape, generous negative space on the LEFT and B
 Mood inspired by community "${communityName || "Premium Community"}" in "${location || ""}", ${capacityKw || ""}kW solar installation.
 Strict rules: NO text, NO logos, NO watermarks, NO people faces. Ultra-detailed, photoreal, magazine cover quality.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(AZURE_IMAGE_ENDPOINT, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${AZURE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: prompt }],
-        modalities: ["image", "text"],
+        prompt: prompt,
+        size: "1792x1024",
+        quality: "high",
+        n: 1,
       }),
     });
 
@@ -49,20 +57,16 @@ Strict rules: NO text, NO logos, NO watermarks, NO people faces. Ultra-detailed,
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error(`AI gateway error: ${response.status}`);
+      console.error("Azure image error:", response.status, t);
+      throw new Error(`Image generation error: ${response.status}`);
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    if (!imageUrl) throw new Error("No image was generated. Try a different theme.");
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image was generated. Try a different theme.");
 
+    const imageUrl = `data:image/png;base64,${b64}`;
     return new Response(JSON.stringify({ image: imageUrl }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
