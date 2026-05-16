@@ -58,7 +58,7 @@ serve(async (req) => {
       body: JSON.stringify({
         prompt: fullPrompt,
         size: spec.size,
-        quality: "high",
+        quality: "medium",
         output_format: "png",
         n: 1,
       }),
