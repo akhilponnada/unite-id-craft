@@ -97,7 +97,7 @@ const SocialMedia: React.FC = () => {
       const { error } = await supabase.from("social_designs").insert({
         user_id: user.id,
         title: prompt.slice(0, 60) || `${FORMAT_INFO[format].label} design`,
-        format, model, prompt, image_url: publicUrl, storage_path: path,
+        format, prompt, image_url: publicUrl, storage_path: path,
       });
       if (error) throw error;
       toast.success("Saved to your library");
