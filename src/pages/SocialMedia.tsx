@@ -8,12 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Sparkles, Image as ImageIcon, Wand2, Loader2, Download, Save, Upload, Trash2 } from "lucide-react";
+import { Sparkles, Image as ImageIcon, Loader2, Download, Save, Upload, Trash2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SOCIAL_FORMATS, FORMAT_BY_ID, type SocialFormat } from "@/lib/social-formats";
 
 type Format = SocialFormat;
-type Model = "unite_gpt" | "unite_flash";
 
 interface BrandAsset { id: string; name: string; asset_type: string; image_url: string; }
 interface SavedDesign { id: string; title: string; format: string; image_url: string; created_at: string; }
@@ -23,8 +22,7 @@ const FORMAT_INFO = FORMAT_BY_ID;
 const SocialMedia: React.FC = () => {
   const { user, loading } = useAuth();
   const [format, setFormat] = useState<Format>("instagram_post");
-  const [model, setModel] = useState<Model>("unite_flash");
-  const [prompt, setPrompt] = useState("");
+    const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<string | null>(null);
 
@@ -49,7 +47,7 @@ const SocialMedia: React.FC = () => {
     setGenerated(null);
     try {
       const { data, error } = await supabase.functions.invoke("generate-social-design", {
-        body: { prompt: prompt.trim(), format, model },
+        body: { prompt: prompt.trim(), format },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -168,23 +166,7 @@ const SocialMedia: React.FC = () => {
                 </Card>
 
                 <Card>
-                  <CardHeader><CardTitle className="text-base">2. AI Model</CardTitle></CardHeader>
-                  <CardContent className="space-y-2">
-                    <button onClick={() => setModel("unite_gpt")}
-                      className={`w-full p-3 rounded-lg border-2 transition-all text-left ${model === "unite_gpt" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}>
-                      <div className="font-semibold text-sm flex items-center gap-2"><Wand2 className="h-4 w-4 text-primary" /> Unite GPT</div>
-                      <div className="text-xs text-muted-foreground">ChatGPT-powered (gpt-image-1). Best for photoreal & detailed scenes.</div>
-                    </button>
-                    <button onClick={() => setModel("unite_flash")}
-                      className={`w-full p-3 rounded-lg border-2 transition-all text-left ${model === "unite_flash" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}>
-                      <div className="font-semibold text-sm flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Unite Flash</div>
-                      <div className="text-xs text-muted-foreground">Gemini-powered. Fast, great for graphic & illustrative styles.</div>
-                    </button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader><CardTitle className="text-base">3. Describe your design</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-base">2. Describe your design</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
                     <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="E.g., Bold orange and dark grey Unite Solar promo for a 30% off summer offer, solar panels on a rooftop, sunny sky, leave space at top for headline."
                       className="min-h-[120px]" disabled={generating} />
@@ -236,7 +218,7 @@ const SocialMedia: React.FC = () => {
                       ) : generating ? (
                         <div className="text-center text-muted-foreground">
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                          <p className="text-sm">Generating with {model === "unite_gpt" ? "Unite GPT" : "Unite Flash"}…</p>
+                          <p className="text-sm">Generating with AI…</p>
                         </div>
                       ) : (
                         <div className="text-center text-muted-foreground p-6">
