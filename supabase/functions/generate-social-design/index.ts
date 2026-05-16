@@ -66,14 +66,15 @@ Design a social media graphic for ${spec.label}. Modern, eye-catching, print-qua
       }),
     });
 
-    if (!r.ok) {
-      const t = await r.text();
-      console.error("Azure image error:", r.status, t);
+    const j = await r.json();
+
+    if (!r.ok || j.error) {
+      console.error("Azure image error:", r.status, JSON.stringify(j));
       if (r.status === 429) throw new Error("Rate limit hit. Try again in a moment.");
-      throw new Error(`Image generation error (${r.status})`);
+      if (j.error?.code === "EngineOverloaded") throw new Error("Azure is busy. Please wait 30 seconds and try again.");
+      throw new Error(j.error?.message || `Image generation error (${r.status})`);
     }
 
-    const j = await r.json();
     const b64 = j.data?.[0]?.b64_json;
     if (!b64) throw new Error("No image returned. Try a different prompt.");
 
