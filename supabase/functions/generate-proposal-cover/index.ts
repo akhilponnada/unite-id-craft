@@ -18,6 +18,7 @@ serve(async (req) => {
     const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT");
 
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
+    if (!AZURE_IMAGE_ENDPOINT) throw new Error("AZURE_IMAGE_ENDPOINT not configured");
 
     const fullPrompt =
       prompt?.trim() ||
@@ -39,7 +40,8 @@ Style: cinematic, ultra-detailed, vector-meets-photoreal, soft volumetric light,
       body: JSON.stringify({
         prompt: fullPrompt,
         size: "1024x1792",
-        quality: "high",
+        quality: "low",
+        output_format: "png",
         n: 1,
       }),
     });

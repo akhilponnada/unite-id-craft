@@ -42,7 +42,8 @@ The design should be a complete card template on a solid white background.`;
       body: JSON.stringify({
         prompt: fullPrompt,
         size: "1024x1024",
-        quality: "high",
+        quality: "low",
+        output_format: "png",
         n: 1,
       }),
     });

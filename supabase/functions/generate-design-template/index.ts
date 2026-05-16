@@ -32,6 +32,7 @@ serve(async (req) => {
     const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT");
 
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
+    if (!AZURE_IMAGE_ENDPOINT) throw new Error("AZURE_IMAGE_ENDPOINT not configured");
 
     const fullPrompt = `Design a professional ${k} background template. ${hint}
 User brief: ${prompt.trim()}.
@@ -47,7 +48,8 @@ Print-ready, clean typography hints, modern, on-brand for a solar / clean-energy
       body: JSON.stringify({
         prompt: fullPrompt,
         size: k === "presentation" ? "1792x1024" : "1024x1792",
-        quality: "high",
+        quality: "low",
+        output_format: "png",
         n: 1,
       }),
     });

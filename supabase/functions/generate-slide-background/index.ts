@@ -44,6 +44,7 @@ serve(async (req) => {
     const AZURE_IMAGE_ENDPOINT = Deno.env.get("AZURE_IMAGE_ENDPOINT");
 
     if (!AZURE_API_KEY) throw new Error("AZURE_API_KEY is not configured");
+    if (!AZURE_IMAGE_ENDPOINT) throw new Error("AZURE_IMAGE_ENDPOINT not configured");
 
     const style = THEME_STYLE[theme] || THEME_STYLE["Dark Premium"];
     const subject = promptForSlide(slideTitle || "");
@@ -63,7 +64,8 @@ Strict rules: NO text, NO watermarks, NO logos, NO faces, NO charts/graphs as ac
       body: JSON.stringify({
         prompt: prompt,
         size: "1792x1024",
-        quality: "high",
+        quality: "low",
+        output_format: "png",
         n: 1,
       }),
     });
